@@ -3,7 +3,7 @@
 .autoform-field{display:flex;flex-direction:column;gap:4px}
 .autoform-label{font-size:13px;font-weight:500;color:#a1a1aa}
 .autoform-required{color:#ef4444;margin-left:2px}
-.autoform-description{font-size:12px;color:#71717a;margin:0}
+.autoform-description{display:none}
 .autoform-input,.autoform-select,.autoform-textarea{padding:10px 12px;background:#09090b;border:1px solid #3f3f46;border-radius:8px;color:#fafafa;font-size:14px;outline:none;transition:border-color .2s;width:100%;box-sizing:border-box}
 .autoform-input:focus,.autoform-select:focus,.autoform-textarea:focus{border-color:#3b82f6;box-shadow:0 0 0 3px rgba(59,130,246,.12)}
 .autoform-textarea{min-height:80px;resize:vertical}
