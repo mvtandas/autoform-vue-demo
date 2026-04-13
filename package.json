@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@autoform/core": "^3.0.0",
     "@autoform/zod": "^5.0.0",
     "@mvtandas/autoform-vue": "^1.0.0",
     "vue": "^3.5.32",

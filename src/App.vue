@@ -1,402 +1,268 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { AutoForm } from '@mvtandas/autoform-vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { ZodProvider } from '@autoform/zod'
+import { parseSchema, getDefaultValues, getLabel, removeEmptyValues } from '@autoform/core'
+import type { ParsedField } from '@autoform/core'
 import { z } from 'zod'
-import { uiComponents } from './autoform/ui-components'
-import { fieldComponents } from './autoform/field-components'
 
 const activeTab = ref<'basic' | 'advanced' | 'nested'>('basic')
-
-// Basic form schema
-const basicSchema = new ZodProvider(
-  z.object({
-    firstName: z.string().min(2).describe('First Name'),
-    lastName: z.string().min(2).describe('Last Name'),
-    email: z.string().email().describe('Email Address'),
-    age: z.number().min(18).max(120).describe('Age'),
-    role: z.enum(['developer', 'designer', 'manager', 'other']).describe('Role'),
-    newsletter: z.boolean().default(false).describe('Subscribe to newsletter'),
-  })
-)
-
-// Advanced form schema
-const advancedSchema = new ZodProvider(
-  z.object({
-    username: z.string().min(3).max(20).describe('Username'),
-    password: z.string().min(8).describe('Password'),
-    confirmPassword: z.string().min(8).describe('Confirm Password'),
-    birthDate: z.coerce.date().describe('Birth Date'),
-    experience: z.enum(['junior', 'mid', 'senior', 'lead']).describe('Experience Level'),
-    remoteWork: z.boolean().default(true).describe('Open to remote work'),
-    salary: z.number().min(0).describe('Expected Salary (USD)'),
-  })
-)
-
-// Nested form schema
-const nestedSchema = new ZodProvider(
-  z.object({
-    company: z.string().min(2).describe('Company Name'),
-    website: z.string().url().describe('Website URL'),
-    contact: z.object({
-      name: z.string().min(2).describe('Contact Name'),
-      email: z.string().email().describe('Contact Email'),
-      phone: z.string().min(5).describe('Phone Number'),
-    }).describe('Contact Information'),
-    industry: z.enum(['tech', 'finance', 'healthcare', 'education', 'other']).describe('Industry'),
-  })
-)
-
 const submittedData = ref<any>(null)
 
-function handleSubmit(data: any) {
-  submittedData.value = data
+const basicZod = z.object({
+  firstName: z.string().min(2).describe('First Name'),
+  lastName: z.string().min(2).describe('Last Name'),
+  email: z.string().email().describe('Email Address'),
+  age: z.number().min(18).max(120).describe('Age'),
+  role: z.enum(['developer', 'designer', 'manager', 'other']).describe('Role'),
+  newsletter: z.boolean().default(false).describe('Subscribe to newsletter'),
+})
+
+const advancedZod = z.object({
+  username: z.string().min(3).max(20).describe('Username'),
+  birthDate: z.coerce.date().describe('Birth Date'),
+  experience: z.enum(['junior', 'mid', 'senior', 'lead']).describe('Experience Level'),
+  salary: z.number().min(0).describe('Expected Salary (USD)'),
+  remoteWork: z.boolean().default(true).describe('Open to remote work'),
+})
+
+const nestedZod = z.object({
+  company: z.string().min(2).describe('Company Name'),
+  website: z.string().url().describe('Website URL'),
+  contact: z.object({
+    name: z.string().min(2).describe('Contact Name'),
+    email: z.string().email().describe('Contact Email'),
+    phone: z.string().min(5).describe('Phone Number'),
+  }),
+  industry: z.enum(['tech', 'finance', 'healthcare', 'education', 'other']).describe('Industry'),
+})
+
+const schemas = {
+  basic: new ZodProvider(basicZod),
+  advanced: new ZodProvider(advancedZod),
+  nested: new ZodProvider(nestedZod),
+}
+
+const currentSchema = computed(() => schemas[activeTab.value])
+const parsed = computed(() => parseSchema(currentSchema.value))
+const values = reactive<Record<string, any>>({})
+const errors = ref<Record<string, string>>({})
+
+function resetForm() {
+  Object.keys(values).forEach(k => delete values[k])
+  Object.assign(values, getDefaultValues(currentSchema.value))
+  errors.value = {}
+  submittedData.value = null
+}
+
+watch(activeTab, () => resetForm(), { immediate: true })
+
+function getValue(path: string): any {
+  return path.split('.').reduce((o: any, k) => o?.[k], values)
+}
+
+function setValue(path: string, val: any) {
+  const keys = path.split('.')
+  let obj: any = values
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (!obj[keys[i]!]) obj[keys[i]!] = {}
+    obj = obj[keys[i]!]
+  }
+  obj[keys[keys.length - 1]!] = val
+}
+
+function handleSubmit() {
+  errors.value = {}
+  const data = removeEmptyValues({ ...values })
+  const result = currentSchema.value.validateSchema(data)
+  if (result.success) {
+    submittedData.value = result.data
+  } else {
+    result.errors?.forEach((e: any) => {
+      errors.value[e.path.join('.')] = e.message
+    })
+  }
+}
+
+function getFieldType(field: ParsedField): string {
+  return field.fieldConfig?.fieldType ?? field.type
 }
 </script>
 
 <template>
   <div class="app">
     <header>
-      <h1>@autoform/vue</h1>
-      <p class="subtitle">Automatically render forms from your Zod schema in Vue 3</p>
+      <div class="logo">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+          <rect width="32" height="32" rx="8" fill="#3b82f6"/>
+          <path d="M8 11h16M8 16h12M8 21h8" stroke="white" stroke-width="2.5" stroke-linecap="round"/>
+        </svg>
+        <h1>autoform-vue</h1>
+      </div>
+      <p class="subtitle">Auto-generate forms from Zod schemas in Vue 3</p>
       <div class="badges">
-        <a href="https://github.com/mvtandas/autoform-vue" target="_blank">
-          <img src="https://img.shields.io/github/stars/mvtandas/autoform-vue?style=social" alt="GitHub" />
-        </a>
-        <a href="https://www.npmjs.com/package/@mvtandas/autoform-vue" target="_blank">
-          <img src="https://img.shields.io/npm/v/@mvtandas/autoform-vue?color=blue" alt="npm" />
-        </a>
+        <a href="https://github.com/mvtandas/autoform-vue" target="_blank" class="badge">GitHub</a>
+        <a href="https://www.npmjs.com/package/@mvtandas/autoform-vue" target="_blank" class="badge badge-blue">npm</a>
+        <a href="https://github.com/vantezzen/autoform/pull/200" target="_blank" class="badge badge-green">PR #200</a>
       </div>
     </header>
 
     <nav class="tabs">
-      <button :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">Basic Form</button>
-      <button :class="{ active: activeTab === 'advanced' }" @click="activeTab = 'advanced'">Advanced Form</button>
-      <button :class="{ active: activeTab === 'nested' }" @click="activeTab = 'nested'">Nested Objects</button>
+      <button :class="{ active: activeTab === 'basic' }" @click="activeTab = 'basic'">Basic</button>
+      <button :class="{ active: activeTab === 'advanced' }" @click="activeTab = 'advanced'">Advanced</button>
+      <button :class="{ active: activeTab === 'nested' }" @click="activeTab = 'nested'">Nested</button>
     </nav>
 
     <div class="content">
       <div class="form-panel">
-        <div v-if="activeTab === 'basic'" class="demo-section">
-          <h2>Basic Form</h2>
-          <p class="demo-desc">A simple user registration form generated from a Zod schema.</p>
-          <AutoForm
-            :schema="basicSchema"
-            :ui-components="uiComponents"
-            :form-components="fieldComponents"
-            with-submit
-            @submit="handleSubmit"
-          />
-        </div>
+        <form @submit.prevent="handleSubmit">
+          <template v-for="field in parsed.fields" :key="field.key">
+            <fieldset v-if="field.type === 'object' && field.schema" class="object-group">
+              <legend>{{ getLabel(field) }}</legend>
+              <div v-for="sub in field.schema" :key="sub.key" class="field">
+                <label :for="`${field.key}.${sub.key}`">
+                  {{ getLabel(sub) }}
+                  <span v-if="sub.required" class="req">*</span>
+                </label>
+                <input
+                  :id="`${field.key}.${sub.key}`"
+                  type="text"
+                  :value="getValue(`${field.key}.${sub.key}`)"
+                  :required="sub.required"
+                  @input="setValue(`${field.key}.${sub.key}`, ($event.target as HTMLInputElement).value)"
+                />
+                <p v-if="errors[`${field.key}.${sub.key}`]" class="error">{{ errors[`${field.key}.${sub.key}`] }}</p>
+              </div>
+            </fieldset>
 
-        <div v-if="activeTab === 'advanced'" class="demo-section">
-          <h2>Advanced Form</h2>
-          <p class="demo-desc">Includes dates, enums, numbers, and boolean fields.</p>
-          <AutoForm
-            :schema="advancedSchema"
-            :ui-components="uiComponents"
-            :form-components="fieldComponents"
-            with-submit
-            @submit="handleSubmit"
-          />
-        </div>
+            <div v-else class="field">
+              <label :for="field.key">
+                {{ getLabel(field) }}
+                <span v-if="field.required" class="req">*</span>
+              </label>
 
-        <div v-if="activeTab === 'nested'" class="demo-section">
-          <h2>Nested Objects</h2>
-          <p class="demo-desc">Nested object schemas are rendered as grouped fieldsets.</p>
-          <AutoForm
-            :schema="nestedSchema"
-            :ui-components="uiComponents"
-            :form-components="fieldComponents"
-            with-submit
-            @submit="handleSubmit"
-          />
-        </div>
+              <input v-if="getFieldType(field) === 'string'" :id="field.key" type="text"
+                :value="getValue(field.key)" :required="field.required"
+                @input="setValue(field.key, ($event.target as HTMLInputElement).value)" />
+
+              <input v-else-if="getFieldType(field) === 'number'" :id="field.key" type="number"
+                :value="getValue(field.key)" :required="field.required"
+                @input="setValue(field.key, Number(($event.target as HTMLInputElement).value))" />
+
+              <input v-else-if="getFieldType(field) === 'date'" :id="field.key" type="date"
+                :required="field.required"
+                @input="setValue(field.key, new Date(($event.target as HTMLInputElement).value))" />
+
+              <select v-else-if="getFieldType(field) === 'select'" :id="field.key"
+                :value="getValue(field.key)" :required="field.required"
+                @change="setValue(field.key, ($event.target as HTMLSelectElement).value)">
+                <option value="" disabled>Select...</option>
+                <option v-for="[val, label] in field.options ?? []" :key="val" :value="val">{{ label }}</option>
+              </select>
+
+              <label v-else-if="getFieldType(field) === 'boolean'" class="checkbox-label">
+                <input :id="field.key" type="checkbox" :checked="!!getValue(field.key)"
+                  @change="setValue(field.key, ($event.target as HTMLInputElement).checked)" />
+                <span>{{ getLabel(field) }}</span>
+              </label>
+
+              <p v-if="errors[field.key]" class="error">{{ errors[field.key] }}</p>
+            </div>
+          </template>
+          <button type="submit" class="submit-btn">Submit</button>
+        </form>
       </div>
 
       <div class="output-panel">
-        <h3>Submitted Data</h3>
-        <pre v-if="submittedData">{{ JSON.stringify(submittedData, null, 2) }}</pre>
-        <p v-else class="placeholder">Submit a form to see the validated output here.</p>
+        <h3>Output</h3>
+        <div v-if="submittedData" class="output-success">
+          <div class="output-badge">Validated</div>
+          <pre>{{ JSON.stringify(submittedData, null, 2) }}</pre>
+        </div>
+        <div v-else-if="Object.keys(errors).length" class="output-errors">
+          <div class="output-badge output-badge-error">Errors</div>
+          <pre>{{ JSON.stringify(errors, null, 2) }}</pre>
+        </div>
+        <p v-else class="placeholder">Submit a form to see validated output</p>
+
+        <div class="schema-preview">
+          <h3>Schema</h3>
+          <pre class="schema-code">{{ activeTab === 'basic' ? `z.object({
+  firstName: z.string().min(2),
+  lastName: z.string().min(2),
+  email: z.string().email(),
+  age: z.number().min(18).max(120),
+  role: z.enum(['developer', ...]),
+  newsletter: z.boolean(),
+})` : activeTab === 'advanced' ? `z.object({
+  username: z.string().min(3).max(20),
+  birthDate: z.coerce.date(),
+  experience: z.enum(['junior', ...]),
+  salary: z.number().min(0),
+  remoteWork: z.boolean(),
+})` : `z.object({
+  company: z.string().min(2),
+  website: z.string().url(),
+  contact: z.object({
+    name: z.string().min(2),
+    email: z.string().email(),
+    phone: z.string().min(5),
+  }),
+  industry: z.enum(['tech', ...]),
+})` }}</pre>
+        </div>
       </div>
     </div>
 
-    <section class="code-section">
-      <h2>Usage</h2>
-      <pre class="code-block"><code>&lt;script setup&gt;
-import { AutoForm } from '@autoform/vue'
-import { ZodProvider } from '@autoform/zod'
-import { z } from 'zod'
-
-const schema = new ZodProvider(
-  z.object({
-    name: z.string().min(2),
-    email: z.string().email(),
-    role: z.enum(['developer', 'designer']),
-  })
-)
-&lt;/script&gt;
-
-&lt;template&gt;
-  &lt;AutoForm
-    :schema="schema"
-    :ui-components="uiComponents"
-    :form-components="fieldComponents"
-    with-submit
-    @submit="console.log"
-  /&gt;
-&lt;/template&gt;</code></pre>
-    </section>
-
     <footer>
-      <p>
-        Built by <a href="https://github.com/mvtandas" target="_blank">Mustafa Vatandas</a>
-        &middot; Part of the <a href="https://github.com/vantezzen/autoform" target="_blank">AutoForm</a> ecosystem
-      </p>
+      Built by <a href="https://github.com/mvtandas" target="_blank">Mustafa Vatandas</a>
+      · Part of <a href="https://github.com/vantezzen/autoform" target="_blank">AutoForm</a> ecosystem
     </footer>
   </div>
 </template>
 
 <style>
-:root {
-  --bg: #0a0a0a;
-  --surface: #141414;
-  --border: #2a2a2a;
-  --text: #ededed;
-  --text-muted: #888;
-  --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --error: #ef4444;
-  --success: #22c55e;
-}
-
-* { margin: 0; padding: 0; box-sizing: border-box; }
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  line-height: 1.6;
-}
-
-.app {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 40px 20px;
-}
-
-header {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-header h1 {
-  font-size: 2.5rem;
-  font-weight: 700;
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 8px;
-}
-
-.subtitle {
-  color: var(--text-muted);
-  font-size: 1.1rem;
-  margin-bottom: 16px;
-}
-
-.badges { display: flex; gap: 8px; justify-content: center; }
-.badges img { height: 20px; }
-
-.tabs {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 24px;
-  background: var(--surface);
-  border-radius: 10px;
-  padding: 4px;
-}
-
-.tabs button {
-  flex: 1;
-  padding: 10px 16px;
-  border: none;
-  background: transparent;
-  color: var(--text-muted);
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.2s;
-}
-
-.tabs button.active {
-  background: var(--primary);
-  color: white;
-}
-
-.content {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-  margin-bottom: 40px;
-}
-
-@media (max-width: 700px) {
-  .content { grid-template-columns: 1fr; }
-}
-
-.form-panel, .output-panel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px;
-}
-
-.demo-section h2 {
-  font-size: 1.2rem;
-  margin-bottom: 4px;
-}
-
-.demo-desc {
-  color: var(--text-muted);
-  font-size: 13px;
-  margin-bottom: 20px;
-}
-
-.output-panel h3 {
-  font-size: 1rem;
-  margin-bottom: 12px;
-  color: var(--text-muted);
-}
-
-.output-panel pre {
-  background: #1a1a2e;
-  padding: 16px;
-  border-radius: 8px;
-  font-size: 13px;
-  overflow-x: auto;
-  color: var(--success);
-}
-
-.placeholder {
-  color: var(--text-muted);
-  font-size: 13px;
-  font-style: italic;
-}
-
-/* Form Styles */
-.space-y-5 { display: flex; flex-direction: column; gap: 16px; }
-
-.field-wrapper {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.field-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text);
-}
-
-.required { color: var(--error); }
-
-.field-description {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
-.form-input {
-  padding: 10px 12px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  font-size: 14px;
-  outline: none;
-  width: 100%;
-  transition: border-color 0.2s;
-}
-
-.form-input:focus {
-  border-color: var(--primary);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-}
-
-.form-checkbox {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--primary);
-}
-
-.checkbox-wrapper {
-  padding: 4px 0;
-}
-
-.field-error {
-  font-size: 12px;
-  color: var(--error);
-}
-
-.submit-btn {
-  padding: 10px 24px;
-  background: var(--primary);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background 0.2s;
-  align-self: flex-start;
-}
-
-.submit-btn:hover { background: var(--primary-hover); }
-
-.object-wrapper {
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.object-wrapper legend {
-  font-weight: 600;
-  padding: 0 8px;
-  font-size: 14px;
-}
-
-.code-section {
-  margin-bottom: 40px;
-}
-
-.code-section h2 {
-  margin-bottom: 12px;
-}
-
-.code-block {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 20px;
-  overflow-x: auto;
-  font-size: 13px;
-  line-height: 1.7;
-}
-
-footer {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 13px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border);
-}
-
-footer a {
-  color: var(--primary);
-  text-decoration: none;
-}
+:root { --bg:#09090b;--surface:#18181b;--surface2:#27272a;--border:#3f3f46;--text:#fafafa;--muted:#a1a1aa;--primary:#3b82f6;--primary-hover:#2563eb;--error:#ef4444;--success:#22c55e;--radius:8px }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-system,sans-serif}
+.app{max-width:900px;margin:0 auto;padding:48px 20px}
+header{text-align:center;margin-bottom:36px}
+.logo{display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:8px}
+.logo h1{font-size:2rem;font-weight:700}
+.subtitle{color:var(--muted);font-size:1rem;margin-bottom:16px}
+.badges{display:flex;gap:8px;justify-content:center}
+.badge{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;text-decoration:none;color:var(--text);background:var(--surface2);border:1px solid var(--border);transition:all .2s}
+.badge:hover{border-color:var(--primary)}
+.badge-blue{background:rgba(59,130,246,.15);border-color:rgba(59,130,246,.3);color:#60a5fa}
+.badge-green{background:rgba(34,197,94,.15);border-color:rgba(34,197,94,.3);color:#4ade80}
+.tabs{display:flex;gap:2px;margin-bottom:24px;background:var(--surface);border-radius:10px;padding:3px}
+.tabs button{flex:1;padding:10px;border:none;background:0 0;color:var(--muted);border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;transition:all .2s}
+.tabs button.active{background:var(--primary);color:#fff}
+.tabs button:hover:not(.active){color:var(--text)}
+.content{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:48px}
+@media(max-width:700px){.content{grid-template-columns:1fr}}
+.form-panel,.output-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px}
+form{display:flex;flex-direction:column;gap:16px}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:13px;font-weight:500;color:var(--muted)}
+.req{color:var(--error)}
+.field input[type=text],.field input[type=number],.field input[type=date],.field select{padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);color:var(--text);font-size:14px;outline:0;transition:border-color .2s;width:100%}
+.field input:focus,.field select:focus{border-color:var(--primary);box-shadow:0 0 0 3px rgba(59,130,246,.12)}
+.checkbox-label{display:flex;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--text)}
+.checkbox-label input{width:18px;height:18px;accent-color:var(--primary)}
+.error{font-size:12px;color:var(--error)}
+.object-group{border:1px solid var(--border);border-radius:var(--radius);padding:16px;display:flex;flex-direction:column;gap:12px}
+.object-group legend{font-weight:600;font-size:14px;padding:0 6px;color:var(--text)}
+.submit-btn{padding:11px 28px;background:var(--primary);color:#fff;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;transition:background .2s;align-self:flex-start}
+.submit-btn:hover{background:var(--primary-hover)}
+.output-panel h3{font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px}
+.output-panel pre{background:var(--bg);padding:16px;border-radius:var(--radius);font-size:12px;overflow-x:auto;line-height:1.6}
+.placeholder{color:var(--muted);font-size:13px;font-style:italic}
+.output-success pre{color:var(--success)}
+.output-errors pre{color:var(--error)}
+.output-badge{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(34,197,94,.15);color:var(--success);margin-bottom:8px}
+.output-badge-error{background:rgba(239,68,68,.15);color:var(--error)}
+.schema-preview{margin-top:20px}
+.schema-code{color:#60a5fa!important;font-size:12px}
+footer{text-align:center;color:var(--muted);font-size:13px;padding-top:24px;border-top:1px solid var(--border)}
+footer a{color:var(--primary);text-decoration:none}
 </style>
