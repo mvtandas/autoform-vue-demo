@@ -11,7 +11,7 @@
   "dependencies": {
     "@autoform/core": "^3.0.0",
     "@autoform/zod": "^5.0.0",
-    "@mvtandas/autoform-vue": "^1.0.0",
+    "@mvtandas/autoform-vue": "^1.0.2",
     "vue": "^3.5.32",
     "zod": "^4.3.6"
   },
